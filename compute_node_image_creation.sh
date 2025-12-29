@@ -132,3 +132,5 @@ echo "Final slurm UID verification:"
 id slurm
 echo ""
 echo "If UID is 981, everything is ready!"
+
+exit
