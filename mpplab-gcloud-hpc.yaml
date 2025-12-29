@@ -1,9 +1,9 @@
-blueprint_name: mpplab-slurm-c3-4vcpu-4node-250gb-storage
+blueprint_name: mpplab-slurm-c3-4vcpu-4node-1024gb-storage
 terraform_backend_defaults:
   type: local
 vars:
   project_id: mpplab-482405
-  deployment_name: mpplab-c3-4vcpu-4node-rocky
+  deployment_name: mpplab-c3-4vcpu-4node-1024gb-storage
   region: asia-south1
   zone: asia-south1-b
   
