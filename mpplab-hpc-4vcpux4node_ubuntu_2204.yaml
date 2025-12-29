@@ -1,0 +1,108 @@
+blueprint_name: mpplab-slurm-c3-4vcpu-4node-250gb-storage
+
+terraform_backend_defaults:
+  type: local
+
+
+vars:
+  project_id: mpplab-482405
+  deployment_name: mpplab-c3-4vcpu-4node
+  region: asia-south1
+  zone: asia-south1-b
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: allow_iap_ssh
+    source: modules/network/firewall-rules
+    use: [network] # Re-added 'use' to allow the subnetwork link to pass through
+    settings:
+      #project_id: mpplab-482405
+      #network_name: $(network.network_name)
+      # FIXED: Added the missing required subnetwork link
+      #subnetwork_self_link: $(network.subnetwork_self_link)
+      ingress_rules:
+        - name: allow-ssh-from-iap
+          description: "Allow SSH via IAP tunnel"
+          priority: 1000
+          source_ranges: ["35.235.240.0/20"]
+          allow:
+            - protocol: tcp
+              ports: ["22"]
+
+  - id: shared_storage
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /data
+      filestore_tier: BASIC_HDD
+      size_gb: 1024 
+
+  - id: hpc_software_script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: install_hpc_pkgs
+        content: |
+          #!/bin/bash
+          apt-get update
+          apt-get install -y build-essential gfortran m4 libtool \
+                             libopenmpi-dev openmpi-bin \
+                             libfftw3-dev liblapack-dev libblas-dev \
+                             git cmake wget
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: c3-highmem-4
+      disk_type: pd-balanced
+      disk_size_gb: 50
+      zone: "asia-south1-b"
+      instance_image:
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
+  
+  # PARTITION: Scheduling configuration
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: c3highmem4
+      is_default: true
+
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      #subnetwork_self_link: $(network.subnetwork_self_link)
+      machine_type: n2-standard-4
+      instance_image:
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
+      enable_oslogin: true
+- id: controller_setup_script
+  source: modules/scripts/startup-script
+  settings:
+    runners:
+    - type: shell
+      destination: install_basics
+      content: |
+        #!/bin/bash
+        apt-get update
+        apt-get install -y unzip curl wget
+    
+- id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, shared_storage, compute_partition, slurm_login]
+    settings:
+      #subnetwork_self_link: $(network.subnetwork_self_link)
+      enable_oslogin: true
+      instance_image:  # Add this
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
