@@ -3,7 +3,7 @@ terraform_backend_defaults:
   type: local
 vars:
   project_id: mpplab-482405
-  deployment_name: mpplab-c3-4vcpu-4node-1024gb-storage
+  deployment_name: mpplab-c3-4node
   region: asia-south1
   zone: asia-south1-b
   
@@ -30,7 +30,7 @@ deployment_groups:
     source: modules/file-system/filestore
     use: [network]
     settings:
-      local_mount: /data
+      local_mount: /home
       filestore_tier: BASIC_HDD
       size_gb: 1024
   
@@ -44,9 +44,8 @@ deployment_groups:
       disk_size_gb: 50
       zone: asia-south1-b
       instance_image:
-        name: ubuntu-2404-slurm-ready-v14 
+        name: ubuntu-2404-slurm-ready-v20 
         project: mpplab-482405
-    
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -54,22 +53,31 @@ deployment_groups:
     settings:
       partition_name: compute
       is_default: true
-  
+
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-4
+      machine_type: c3-standard-4
       instance_image:
-        family: hpc-rocky-linux-8
-        project: cloud-hpc-image-public
+        name: ubuntu-2404-slurm-login-v4
+        project: mpplab-482405
       enable_oslogin: true
-  
+      startup_script: |
+        #!/bin/bash
+        cat > /etc/profile.d/intel-mpi-pmi.sh << 'EOF'
+        export I_MPI_PMI_LIBRARY=/usr/lib/x86_64-linux-gnu/libpmi2.so.0
+        export I_MPI_PMI=pmi2
+        EOF
+        chmod +x /etc/profile.d/intel-mpi-pmi.sh
+
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, shared_storage, compute_partition, slurm_login]
+    use: [network, compute_partition,slurm_login]
     settings:
       enable_oslogin: true
       instance_image:
-        family: hpc-rocky-linux-8
-        project: cloud-hpc-image-public
+        name: ubuntu-2404-slurm-controller-v8
+        project: mpplab-482405
+      network_storage: [$(shared_storage.network_storage)]
+
